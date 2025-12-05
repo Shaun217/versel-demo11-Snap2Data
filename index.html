@@ -24,19 +24,27 @@
     </div>
 
     <main class="workspace">
-        <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-            <div id="emptyState">
-                <span class="material-icons-round icon-huge">add_photo_alternate</span>
-                <h3>点击上传 或 直接 Ctrl+V 粘贴截图</h3>
-                <p class="sub-text">支持 JPG, PNG, WEBP</p>
+        <div class="left-panel">
+            <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+                <div id="emptyState">
+                    <span class="material-icons-round icon-huge">add_photo_alternate</span>
+                    <h3>点击上传 或 直接 Ctrl+V 粘贴截图</h3>
+                    <p class="sub-text">支持 JPG, PNG, WEBP</p>
+                </div>
+                <img id="previewImg" class="hidden">
+                
+                <div id="loadingState" class="hidden">
+                    <div class="spinner"></div>
+                    <p>AI 正在读取数据...</p>
+                </div>
             </div>
-            <img id="previewImg" class="hidden">
-            <div id="loadingState" class="hidden">
-                <div class="spinner"></div>
-                <p>AI 正在逐行读取数据...</p>
-            </div>
+            <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
+
+            <button id="startBtn" class="action-btn hidden" onclick="startProcess()">
+                <span class="material-icons-round">auto_awesome</span>
+                开始识别表格
+            </button>
         </div>
-        <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
 
         <div class="result-zone hidden" id="resultZone">
             <div class="result-header">
@@ -47,8 +55,7 @@
                 </div>
             </div>
             
-            <div class="table-container" id="tableOutput">
-                </div>
+            <div class="table-container" id="tableOutput"></div>
         </div>
     </main>
 </div>

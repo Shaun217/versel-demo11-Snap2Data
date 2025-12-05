@@ -26,7 +26,6 @@ body {
     gap: 20px;
 }
 
-/* 头部 */
 header {
     display: flex;
     justify-content: space-between;
@@ -37,7 +36,6 @@ header {
 .logo { display: flex; align-items: center; gap: 10px; color: var(--primary); }
 .logo h1 { margin: 0; font-size: 1.5rem; }
 
-/* 设置栏 */
 .settings-bar {
     display: flex;
     gap: 10px;
@@ -55,15 +53,29 @@ input[type="password"] {
     outline: none;
 }
 
-/* 工作区布局 */
+.save-btn {
+    padding: 8px 15px;
+    border: 1px solid var(--border);
+    background: #f1f5f9;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
 .workspace {
     display: flex;
     gap: 20px;
     flex: 1;
-    min-height: 0; /* 防止溢出 */
+    min-height: 0;
 }
 
-/* 上传区 */
+/* 左侧面板 */
+.left-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
 .upload-zone {
     flex: 1;
     background: var(--surface);
@@ -91,7 +103,27 @@ input[type="password"] {
     display: none;
 }
 
-/* 加载动画 */
+/* 核心操作按钮 */
+.action-btn {
+    width: 100%;
+    padding: 15px;
+    background: linear-gradient(135deg, var(--primary), #3b82f6);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2);
+    transition: transform 0.2s;
+}
+.action-btn:hover { transform: translateY(-2px); }
+.action-btn:active { transform: scale(0.98); }
+
 #loadingState {
     position: absolute;
     background: rgba(255,255,255,0.9);
@@ -104,6 +136,7 @@ input[type="password"] {
     color: var(--primary);
     font-weight: bold;
 }
+
 .spinner {
     width: 40px; height: 40px;
     border: 4px solid #e2e8f0;
@@ -114,7 +147,6 @@ input[type="password"] {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* 结果区 */
 .result-zone {
     flex: 1;
     background: var(--surface);
@@ -141,13 +173,11 @@ input[type="password"] {
     border-radius: 8px;
 }
 
-/* 表格样式 */
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-th, td { border: 1px solid var(--border); padding: 8px; text-align: left; }
-th { background: #f1f5f9; position: sticky; top: 0; }
+th, td { border: 1px solid var(--border); padding: 8px; text-align: left; white-space: nowrap; }
+th { background: #f1f5f9; position: sticky; top: 0; font-weight: 600; }
 tr:nth-child(even) { background: #f8fafc; }
 
-/* 按钮 */
 .btn {
     padding: 8px 16px;
     border-radius: 6px;
@@ -164,8 +194,7 @@ tr:nth-child(even) { background: #f8fafc; }
 .hidden { display: none !important; }
 #fileInput { display: none; }
 
-/* 移动端适配 */
 @media (max-width: 768px) {
     .workspace { flex-direction: column; }
-    .upload-zone { min-height: 200px; }
+    .left-panel { min-height: 300px; }
 }
