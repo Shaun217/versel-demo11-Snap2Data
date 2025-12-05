@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 Snap2Data - 截图变表格</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div class="logo">
+            <span class="material-icons-round">table_view</span>
+            <h1>Snap2Data</h1>
+        </div>
+        <p>截图 -> 粘贴 (Ctrl+V) -> 获得 Excel</p>
+    </header>
+
+    <div class="settings-bar">
+        <input type="password" id="apiKey" placeholder="在此粘贴 Google Gemini API Key">
+        <button class="save-btn" onclick="saveKey()">🔒 暂存 Key</button>
+    </div>
+
+    <main class="workspace">
+        <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+            <div id="emptyState">
+                <span class="material-icons-round icon-huge">add_photo_alternate</span>
+                <h3>点击上传 或 直接 Ctrl+V 粘贴截图</h3>
+                <p class="sub-text">支持 JPG, PNG, WEBP</p>
+            </div>
+            <img id="previewImg" class="hidden">
+            <div id="loadingState" class="hidden">
+                <div class="spinner"></div>
+                <p>AI 正在逐行读取数据...</p>
+            </div>
+        </div>
+        <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
+
+        <div class="result-zone hidden" id="resultZone">
+            <div class="result-header">
+                <h3>识别结果</h3>
+                <div class="actions">
+                    <button class="btn secondary" onclick="copyTable()">📋 复制</button>
+                    <button class="btn primary" onclick="downloadCSV()">📥 下载 CSV</button>
+                </div>
+            </div>
+            
+            <div class="table-container" id="tableOutput">
+                </div>
+        </div>
+    </main>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
