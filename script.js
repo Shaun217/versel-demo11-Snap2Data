@@ -33,6 +33,37 @@ function handleFile(input) {
     reader.readAsDataURL(file);
 }
 
+// --- ✨ 新增：自动获取可用模型 (核心修复) ---
+async function getValidModel(apiKey) {
+    try {
+        // 请求模型列表
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        const data = await response.json();
+        
+        if (!data.models) {
+            console.warn("无法获取模型列表，尝试使用默认值");
+            return "gemini-1.5-flash-latest"; 
+        }
+
+        // 策略：优先找 'flash'，找不到就找 'pro'
+        const models = data.models.map(m => m.name.replace('models/', ''));
+        
+        // 1. 优先匹配 1.5 flash
+        let bestModel = models.find(m => m.includes('gemini-1.5-flash'));
+        // 2. 其次匹配 1.5 pro
+        if (!bestModel) bestModel = models.find(m => m.includes('gemini-1.5-pro'));
+        // 3. 实在不行随便拿个带 gemini 的
+        if (!bestModel) bestModel = models.find(m => m.includes('gemini'));
+
+        console.log("自动选择的最佳模型:", bestModel);
+        return bestModel || "gemini-1.5-flash-latest"; 
+
+    } catch (e) {
+        console.warn("自动获取模型失败，使用保底值:", e);
+        return "gemini-1.5-flash-latest"; // 保底方案
+    }
+}
+
 // --- 2. AI 提取逻辑 ---
 async function startExtraction() {
     const apiKey = document.getElementById('apiKey').value.trim();
@@ -40,12 +71,17 @@ async function startExtraction() {
 
     const btn = document.getElementById('extractBtn');
     const spinner = document.getElementById('loadingSpinner');
+    const placeholder = document.getElementById('placeholderText');
     
     btn.disabled = true;
     spinner.classList.remove('hidden');
-    document.getElementById('placeholderText').innerText = "AI 正在识别表格结构，请稍候...";
+    placeholder.innerText = "🔍 正在寻找最佳 AI 模型...";
 
     try {
+        // 1. 动态获取模型名称
+        const modelName = await getValidModel(apiKey);
+        placeholder.innerText = `⚡ 正在使用 ${modelName} 读取表格...`;
+
         const prompt = `
         Task: Extract data from this image into clean CSV format.
         Rules:
@@ -55,7 +91,9 @@ async function startExtraction() {
         4. If no table found, return "ERROR".
         `;
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+        const response = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -70,6 +108,10 @@ async function startExtraction() {
 
         const data = await response.json();
         if (data.error) throw new Error(data.error.message);
+        
+        if (!data.candidates || !data.candidates[0].content) {
+            throw new Error("AI 没有返回内容，可能是图片太模糊或包含敏感信息。");
+        }
 
         const text = data.candidates[0].content.parts[0].text;
         // 清洗数据
@@ -80,10 +122,11 @@ async function startExtraction() {
         
         // 默认切到表格视图
         switchTab('table');
-        document.getElementById('placeholderText').classList.add('hidden');
+        placeholder.classList.add('hidden');
 
     } catch (error) {
         alert("提取失败: " + error.message);
+        placeholder.innerText = "❌ 出错了，请重试";
     } finally {
         btn.disabled = false;
         spinner.classList.add('hidden');
@@ -92,13 +135,9 @@ async function startExtraction() {
 
 // --- 3. 多格式转换与渲染 ---
 function updateAllViews() {
-    // 1. 渲染表格
     renderTable(rawCSV);
-    // 2. 渲染 CSV 源码
     document.getElementById('view-csv').value = rawCSV;
-    // 3. 渲染 JSON
     document.getElementById('view-json').value = JSON.stringify(csvToJson(rawCSV), null, 2);
-    // 4. 渲染 Markdown
     document.getElementById('view-md').value = csvToMarkdown(rawCSV);
 }
 
@@ -107,7 +146,7 @@ function renderTable(csv) {
     let html = '<table>';
     rows.forEach((row, i) => {
         html += '<tr>';
-        // 简单处理逗号分隔 (生产环境建议用 PapaParse 库)
+        // 简单处理逗号分隔
         row.split(',').forEach(cell => {
             const tag = i === 0 ? 'th' : 'td';
             html += `<${tag}>${cell.trim()}</${tag}>`;
@@ -118,9 +157,9 @@ function renderTable(csv) {
     document.getElementById('view-table').innerHTML = html;
 }
 
-// 工具：CSV 转 JSON
 function csvToJson(csv) {
     const lines = csv.split('\n');
+    if (lines.length < 2) return [];
     const headers = lines[0].split(',').map(h => h.trim());
     return lines.slice(1).map(line => {
         const data = line.split(',');
@@ -131,15 +170,12 @@ function csvToJson(csv) {
     });
 }
 
-// 工具：CSV 转 Markdown
 function csvToMarkdown(csv) {
     const rows = csv.split('\n').map(r => r.split(',').map(c => c.trim()));
     if (rows.length === 0) return "";
-    
     const header = `| ${rows[0].join(' | ')} |`;
     const separator = `| ${rows[0].map(() => '---').join(' | ')} |`;
     const body = rows.slice(1).map(r => `| ${r.join(' | ')} |`).join('\n');
-    
     return `${header}\n${separator}\n${body}`;
 }
 
@@ -148,24 +184,31 @@ let currentFormat = 'table';
 
 function switchTab(format) {
     currentFormat = format;
-    // 切换按钮样式
     document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
+    // 简单的事件代理查找
+    const tabs = document.querySelectorAll('.tab');
+    if(format === 'table') tabs[0].classList.add('active');
+    if(format === 'csv') tabs[1].classList.add('active');
+    if(format === 'json') tabs[2].classList.add('active');
+    if(format === 'md') tabs[3].classList.add('active');
     
-    // 切换内容显示
     document.querySelectorAll('.view-box').forEach(div => div.classList.add('hidden'));
     document.getElementById(`view-${format}`).classList.remove('hidden');
 }
 
 function copyCurrentContent() {
     if (!rawCSV) return alert("暂无内容");
-    
     let content = "";
     if (currentFormat === 'table' || currentFormat === 'csv') content = rawCSV;
     else if (currentFormat === 'json') content = document.getElementById('view-json').value;
     else if (currentFormat === 'md') content = document.getElementById('view-md').value;
 
-    navigator.clipboard.writeText(content).then(() => alert("已复制到剪贴板！"));
+    navigator.clipboard.writeText(content).then(() => {
+        const btn = document.querySelector('.primary-btn');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<span class="material-icons-round">check</span> 已复制';
+        setTimeout(() => btn.innerHTML = originalText, 2000);
+    });
 }
 
 function downloadFile() {
@@ -181,7 +224,7 @@ function downloadFile() {
         ext = "md";
         type = "text/markdown";
     } else {
-        content = "\uFEFF" + rawCSV; // 加 BOM 防止 Excel 乱码
+        content = "\uFEFF" + rawCSV; 
         ext = "csv";
         type = "text/csv";
     }
@@ -190,14 +233,13 @@ function downloadFile() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `data.${ext}`;
+    a.download = `extracted_data.${ext}`;
     a.click();
 }
 
-// 本地存储 Key
 function saveKey() {
     const key = document.getElementById('apiKey').value;
-    if(key) {
+    if (key) {
         localStorage.setItem('gemini_key', key);
         alert("Key 已保存");
     }
@@ -205,5 +247,5 @@ function saveKey() {
 
 window.onload = () => {
     const savedKey = localStorage.getItem('gemini_key');
-    if(savedKey) document.getElementById('apiKey').value = savedKey;
+    if (savedKey) document.getElementById('apiKey').value = savedKey;
 }
