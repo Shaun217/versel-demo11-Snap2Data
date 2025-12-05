@@ -1,79 +1,61 @@
-let currentCSV = ""; 
-let currentBase64 = null; // 暂存图片数据
+let currentBase64 = null;
 let currentMimeType = null;
+let rawCSV = ""; // 存储原始 CSV 数据
 
-// 1. 粘贴事件监听
-document.addEventListener('paste', (event) => {
-    const items = (event.clipboardData || event.originalEvent.clipboardData).items;
-    for (const item of items) {
+// --- 1. 文件与粘贴处理 ---
+document.addEventListener('paste', (e) => {
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (let item of items) {
         if (item.kind === 'file' && item.type.startsWith('image/')) {
-            const blob = item.getAsFile();
-            processFile(blob);
-            break;
+            handleFile(item.getAsFile());
         }
     }
 });
 
-function handleFileSelect(event) {
-    const file = event.target.files[0];
-    if (file) processFile(file);
-}
+function handleFile(input) {
+    const file = input instanceof Event ? input.target.files[0] : input;
+    if (!file) return;
 
-// 2. 处理文件：只负责预览，不调 API
-function processFile(file) {
     const reader = new FileReader();
     reader.onload = (e) => {
-        const base64Data = e.target.result;
-        
-        // 1. 存下来
-        currentBase64 = base64Data.split(',')[1];
-        currentMimeType = base64Data.split(';')[0].split(':')[1];
+        const raw = e.target.result;
+        currentBase64 = raw.split(',')[1];
+        currentMimeType = raw.split(';')[0].split(':')[1];
 
-        // 2. 显示预览图
-        const img = document.getElementById('previewImg');
-        const empty = document.getElementById('emptyState');
-        const startBtn = document.getElementById('startBtn');
+        // 显示预览
+        document.getElementById('previewImg').src = raw;
+        document.getElementById('previewImg').classList.remove('hidden');
+        document.getElementById('emptyState').classList.add('hidden');
         
-        img.src = base64Data;
-        img.classList.remove('hidden');
-        img.style.display = 'block';
-        empty.style.display = 'none';
-        
-        // 3. 显示“开始识别”按钮
-        startBtn.classList.remove('hidden');
+        // 激活提取按钮
+        document.getElementById('extractBtn').disabled = false;
     };
     reader.readAsDataURL(file);
 }
 
-// 3. 点击按钮触发 API
-async function startProcess() {
+// --- 2. AI 提取逻辑 ---
+async function startExtraction() {
     const apiKey = document.getElementById('apiKey').value.trim();
-    
-    if (!apiKey) return alert("请先在顶部输入 API Key");
-    if (!currentBase64) return alert("请先上传或粘贴图片");
+    if (!apiKey) return alert("请先输入 API Key");
 
-    const loading = document.getElementById('loadingState');
-    const startBtn = document.getElementById('startBtn');
+    const btn = document.getElementById('extractBtn');
+    const spinner = document.getElementById('loadingSpinner');
     
-    loading.classList.remove('hidden');
-    startBtn.disabled = true;
-    startBtn.innerHTML = '<span class="material-icons-round">hourglass_empty</span> 识别中...';
-    
+    btn.disabled = true;
+    spinner.classList.remove('hidden');
+    document.getElementById('placeholderText').innerText = "AI 正在识别表格结构，请稍候...";
+
     try {
-        const modelName = "gemini-1.5-flash"; 
-        
         const prompt = `
-        Task: Extract the data from this image and convert it into a CSV format.
+        Task: Extract data from this image into clean CSV format.
         Rules:
-        1. Output ONLY the CSV data. Do not include markdown code blocks (like \`\`\`csv), do not include explanations.
-        2. Use comma (,) as the delimiter.
-        3. If there are merged cells, duplicate the value in the corresponding cells.
-        4. If the image does not contain a table, return "ERROR: No table found".
+        1. Output ONLY the CSV data. No markdown, no explanations.
+        2. Use comma (,) delimiter.
+        3. Handle merged cells by duplicating values.
+        4. If no table found, return "ERROR".
         `;
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-        
-        const response = await fetch(url, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -87,78 +69,141 @@ async function startProcess() {
         });
 
         const data = await response.json();
-        
         if (data.error) throw new Error(data.error.message);
-        if (!data.candidates) throw new Error("识别失败，请重试");
 
-        const rawText = data.candidates[0].content.parts[0].text.trim();
-        currentCSV = rawText.replace(/```csv|```/g, "").trim();
+        const text = data.candidates[0].content.parts[0].text;
+        // 清洗数据
+        rawCSV = text.replace(/```csv|```/g, "").trim();
         
-        renderTable(currentCSV);
+        // 更新所有视图
+        updateAllViews();
         
+        // 默认切到表格视图
+        switchTab('table');
+        document.getElementById('placeholderText').classList.add('hidden');
+
     } catch (error) {
-        alert("出错了: " + error.message);
+        alert("提取失败: " + error.message);
     } finally {
-        loading.classList.add('hidden');
-        startBtn.disabled = false;
-        startBtn.innerHTML = '<span class="material-icons-round">auto_awesome</span> 重新识别';
+        btn.disabled = false;
+        spinner.classList.add('hidden');
     }
 }
 
-function renderTable(csvContent) {
-    const rows = csvContent.split('\n');
+// --- 3. 多格式转换与渲染 ---
+function updateAllViews() {
+    // 1. 渲染表格
+    renderTable(rawCSV);
+    // 2. 渲染 CSV 源码
+    document.getElementById('view-csv').value = rawCSV;
+    // 3. 渲染 JSON
+    document.getElementById('view-json').value = JSON.stringify(csvToJson(rawCSV), null, 2);
+    // 4. 渲染 Markdown
+    document.getElementById('view-md').value = csvToMarkdown(rawCSV);
+}
+
+function renderTable(csv) {
+    const rows = csv.split('\n');
     let html = '<table>';
-    
-    rows.forEach((row, index) => {
-        const cells = row.split(','); 
+    rows.forEach((row, i) => {
         html += '<tr>';
-        cells.forEach(cell => {
-            const cleanCell = cell.replace(/^"|"$/g, '').trim();
-            if (index === 0) {
-                html += `<th>${cleanCell}</th>`;
-            } else {
-                html += `<td>${cleanCell}</td>`;
-            }
+        // 简单处理逗号分隔 (生产环境建议用 PapaParse 库)
+        row.split(',').forEach(cell => {
+            const tag = i === 0 ? 'th' : 'td';
+            html += `<${tag}>${cell.trim()}</${tag}>`;
         });
         html += '</tr>';
     });
     html += '</table>';
-    
-    const output = document.getElementById('tableOutput');
-    output.innerHTML = html;
-    document.getElementById('resultZone').classList.remove('hidden');
+    document.getElementById('view-table').innerHTML = html;
 }
 
-function downloadCSV() {
-    if (!currentCSV) return;
-    // 添加 BOM 头防止 Excel 中文乱码
-    const bom = "\uFEFF";
-    const blob = new Blob([bom + currentCSV], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", "table_data.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
-
-function copyTable() {
-    if (!currentCSV) return;
-    navigator.clipboard.writeText(currentCSV).then(() => {
-        alert("CSV 数据已复制到剪贴板");
+// 工具：CSV 转 JSON
+function csvToJson(csv) {
+    const lines = csv.split('\n');
+    const headers = lines[0].split(',').map(h => h.trim());
+    return lines.slice(1).map(line => {
+        const data = line.split(',');
+        return headers.reduce((obj, nextKey, index) => {
+            obj[nextKey] = data[index]?.trim();
+            return obj;
+        }, {});
     });
 }
 
+// 工具：CSV 转 Markdown
+function csvToMarkdown(csv) {
+    const rows = csv.split('\n').map(r => r.split(',').map(c => c.trim()));
+    if (rows.length === 0) return "";
+    
+    const header = `| ${rows[0].join(' | ')} |`;
+    const separator = `| ${rows[0].map(() => '---').join(' | ')} |`;
+    const body = rows.slice(1).map(r => `| ${r.join(' | ')} |`).join('\n');
+    
+    return `${header}\n${separator}\n${body}`;
+}
+
+// --- 4. 界面交互 ---
+let currentFormat = 'table';
+
+function switchTab(format) {
+    currentFormat = format;
+    // 切换按钮样式
+    document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+    
+    // 切换内容显示
+    document.querySelectorAll('.view-box').forEach(div => div.classList.add('hidden'));
+    document.getElementById(`view-${format}`).classList.remove('hidden');
+}
+
+function copyCurrentContent() {
+    if (!rawCSV) return alert("暂无内容");
+    
+    let content = "";
+    if (currentFormat === 'table' || currentFormat === 'csv') content = rawCSV;
+    else if (currentFormat === 'json') content = document.getElementById('view-json').value;
+    else if (currentFormat === 'md') content = document.getElementById('view-md').value;
+
+    navigator.clipboard.writeText(content).then(() => alert("已复制到剪贴板！"));
+}
+
+function downloadFile() {
+    if (!rawCSV) return;
+    let content = "", ext = "", type = "";
+    
+    if (currentFormat === 'json') {
+        content = document.getElementById('view-json').value;
+        ext = "json";
+        type = "application/json";
+    } else if (currentFormat === 'md') {
+        content = document.getElementById('view-md').value;
+        ext = "md";
+        type = "text/markdown";
+    } else {
+        content = "\uFEFF" + rawCSV; // 加 BOM 防止 Excel 乱码
+        ext = "csv";
+        type = "text/csv";
+    }
+
+    const blob = new Blob([content], { type: type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `data.${ext}`;
+    a.click();
+}
+
+// 本地存储 Key
 function saveKey() {
     const key = document.getElementById('apiKey').value;
-    if (key) {
+    if(key) {
         localStorage.setItem('gemini_key', key);
-        alert("Key 已暂存");
+        alert("Key 已保存");
     }
 }
 
 window.onload = () => {
     const savedKey = localStorage.getItem('gemini_key');
-    if (savedKey) document.getElementById('apiKey').value = savedKey;
+    if(savedKey) document.getElementById('apiKey').value = savedKey;
 }

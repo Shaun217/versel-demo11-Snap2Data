@@ -3,61 +3,81 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📊 Snap2Data - 截图变表格</title>
+    <title>Snap2Data Pro - 全能表格提取</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 </head>
 <body>
 
-<div class="container">
-    <header>
-        <div class="logo">
-            <span class="material-icons-round">table_view</span>
-            <h1>Snap2Data</h1>
-        </div>
-        <p>截图 -> 粘贴 (Ctrl+V) -> 获得 Excel</p>
-    </header>
-
-    <div class="settings-bar">
-        <input type="password" id="apiKey" placeholder="在此粘贴 Google Gemini API Key">
-        <button class="save-btn" onclick="saveKey()">🔒 暂存 Key</button>
+<nav class="navbar">
+    <div class="logo">
+        <span class="material-icons-round">grid_on</span>
+        <span>Snap2Data Pro</span>
     </div>
+    <div class="api-input-group">
+        <input type="password" id="apiKey" placeholder="在此粘贴 Google Gemini API Key">
+        <button onclick="saveKey()" title="保存Key到本地"><span class="material-icons-round">save</span></button>
+    </div>
+</nav>
 
-    <main class="workspace">
-        <div class="left-panel">
-            <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-                <div id="emptyState">
-                    <span class="material-icons-round icon-huge">add_photo_alternate</span>
-                    <h3>点击上传 或 直接 Ctrl+V 粘贴截图</h3>
-                    <p class="sub-text">支持 JPG, PNG, WEBP</p>
-                </div>
-                <img id="previewImg" class="hidden">
-                
-                <div id="loadingState" class="hidden">
-                    <div class="spinner"></div>
-                    <p>AI 正在读取数据...</p>
-                </div>
+<div class="main-container">
+    
+    <section class="panel left-panel">
+        <div class="panel-header">
+            <h2>📤 原始图片</h2>
+            <span class="badge">支持 Ctrl+V</span>
+        </div>
+        
+        <div class="upload-area" id="dropZone" onclick="document.getElementById('fileInput').click()">
+            <div id="emptyState">
+                <span class="material-icons-round icon-large">add_a_photo</span>
+                <p>点击上传 或 粘贴截图</p>
             </div>
-            <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
+            <img id="previewImg" class="hidden">
+        </div>
+        <input type="file" id="fileInput" accept="image/*" onchange="handleFile(event)">
+    </section>
 
-            <button id="startBtn" class="action-btn hidden" onclick="startProcess()">
-                <span class="material-icons-round">auto_awesome</span>
-                开始识别表格
-            </button>
+    <section class="action-bar">
+        <button id="extractBtn" class="fab-btn" onclick="startExtraction()" disabled>
+            <span class="material-icons-round">arrow_forward</span>
+            <span class="btn-text">一键提取</span>
+        </button>
+        <div id="loadingSpinner" class="spinner hidden"></div>
+    </section>
+
+    <section class="panel right-panel">
+        <div class="panel-header">
+            <h2>📥 提取结果</h2>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('table')">预览</button>
+                <button class="tab" onclick="switchTab('csv')">CSV</button>
+                <button class="tab" onclick="switchTab('json')">JSON</button>
+                <button class="tab" onclick="switchTab('md')">Markdown</button>
+            </div>
         </div>
 
-        <div class="result-zone hidden" id="resultZone">
-            <div class="result-header">
-                <h3>识别结果</h3>
-                <div class="actions">
-                    <button class="btn secondary" onclick="copyTable()">📋 复制</button>
-                    <button class="btn primary" onclick="downloadCSV()">📥 下载 CSV</button>
-                </div>
+        <div class="content-area">
+            <div id="placeholderText" class="placeholder">
+                数据将显示在这里...
             </div>
             
-            <div class="table-container" id="tableOutput"></div>
+            <div id="view-table" class="view-box hidden"></div>
+            <textarea id="view-csv" class="view-box code-box hidden" readonly></textarea>
+            <textarea id="view-json" class="view-box code-box hidden" readonly></textarea>
+            <textarea id="view-md" class="view-box code-box hidden" readonly></textarea>
         </div>
-    </main>
+
+        <div class="panel-footer">
+            <button class="action-link" onclick="downloadFile()">
+                <span class="material-icons-round">download</span> 下载文件
+            </button>
+            <button class="primary-btn" onclick="copyCurrentContent()">
+                <span class="material-icons-round">content_copy</span> 复制当前内容
+            </button>
+        </div>
+    </section>
+
 </div>
 
 <script src="script.js"></script>
